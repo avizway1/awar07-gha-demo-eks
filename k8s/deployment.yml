@@ -1,11 +1,4 @@
-apiVersion: v1
-kind: Namespace
-metadata:
-  name: aviz-demo
-  labels:
-    app: aviz-demo
-    env: staging
----
+
 apiVersion: apps/v1
 kind: Deployment
 metadata:

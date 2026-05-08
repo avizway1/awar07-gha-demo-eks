@@ -1,0 +1,10 @@
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: aviz-demo
+  namespace: aviz-demo
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: aviz-demo
