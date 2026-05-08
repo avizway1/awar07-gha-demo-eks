@@ -43,6 +43,10 @@ jobs:
             --region ${{ inputs.aws-region }} \
             --name "${{ secrets.EKS_CLUSTER_NAME }}"
 
+      - name: Apply base Kubernetes manifests
+        run: |
+          kubectl apply -f k8s/
+
       - name: Deploy new image to EKS
         run: |
           IMAGE="${{ steps.login-ecr.outputs.registry }}/${{ secrets.ECR_REPO_NAME }}:${{ github.sha }}"
