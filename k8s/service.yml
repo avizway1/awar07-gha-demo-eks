@@ -1,0 +1,20 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: aviz-demo
+  namespace: aviz-demo
+  labels:
+    app: aviz-demo
+  annotations:
+    # Creates an internet-facing AWS Classic/NLB ELB for testing.
+    # Change to "internal" if you want a private load balancer.
+    service.beta.kubernetes.io/aws-load-balancer-scheme: "internet-facing"
+spec:
+  type: LoadBalancer
+  selector:
+    app: aviz-demo
+  ports:
+    - name: http
+      protocol: TCP
+      port: 80
+      targetPort: 5000

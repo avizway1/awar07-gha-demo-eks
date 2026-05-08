@@ -1,0 +1,72 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: aviz-demo
+  namespace: aviz-demo
+  labels:
+    app: aviz-demo
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: aviz-demo
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0        # zero-downtime rollout
+  template:
+    metadata:
+      labels:
+        app: aviz-demo
+    spec:
+      # ── Security context ────────────────────────────────────────────────────
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+
+      containers:
+        - name: aviz-demo                  # must match EKS_CONTAINER_NAME secret
+          # Image is overwritten by the CI pipeline via kubectl set image.
+          # Replace the placeholder with your actual ECR URI for manual testing.
+          image: 655700896650.dkr.ecr.ap-south-1.amazonaws.com/gha-ecrdeploy:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 5000
+
+          env:
+            - name: APP_ENV
+              value: "staging"
+            - name: PORT
+              value: "5000"
+
+          # ── Resource limits ────────────────────────────────────────────────
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "250m"
+              memory: "256Mi"
+
+          # ── Readiness probe — pod receives traffic only when /health is 200 ─
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 5000
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            failureThreshold: 3
+
+          # ── Liveness probe — restarts pod if /health stops responding ───────
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 5000
+            initialDelaySeconds: 20
+            periodSeconds: 15
+            failureThreshold: 3
+
+      # ── Graceful shutdown ────────────────────────────────────────────────────
+      terminationGracePeriodSeconds: 30
