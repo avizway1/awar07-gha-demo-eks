@@ -1,0 +1,94 @@
+name: Reusable - Smoke Test (EKS Deployment Health)
+
+on:
+  workflow_call:
+    inputs:
+      aws-region:
+        description: "AWS region where the EKS cluster is running"
+        required: false
+        type: string
+        default: "ap-south-1"
+      retries:
+        description: "Max retry attempts before failing"
+        required: false
+        type: number
+        default: 5
+      retry-delay-seconds:
+        description: "Wait time in seconds between retries"
+        required: false
+        type: number
+        default: 15
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  smoke-test:
+    name: EKS deployment health check
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-region: ${{ inputs.aws-region }}
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+
+      - name: Update kubeconfig for EKS cluster
+        run: |
+          aws eks update-kubeconfig \
+            --region ${{ inputs.aws-region }} \
+            --name "${{ secrets.EKS_CLUSTER_NAME }}"
+
+      - name: Wait for EKS to begin rollout
+        run: sleep 20
+
+      - name: Check EKS deployment health with retries
+        run: |
+          MAX=${{ inputs.retries }}
+          DELAY=${{ inputs.retry-delay-seconds }}
+
+          echo "Cluster    : ${{ secrets.EKS_CLUSTER_NAME }}"
+          echo "Namespace  : ${{ secrets.EKS_NAMESPACE }}"
+          echo "Deployment : ${{ secrets.EKS_DEPLOYMENT_NAME }}"
+
+          for i in $(seq 1 $MAX); do
+            echo ""
+            echo "Attempt $i/$MAX — querying EKS deployment..."
+
+            DESIRED=$(kubectl get deployment ${{ secrets.EKS_DEPLOYMENT_NAME }} \
+              --namespace=${{ secrets.EKS_NAMESPACE }} \
+              -o jsonpath='{.spec.replicas}')
+
+            READY=$(kubectl get deployment ${{ secrets.EKS_DEPLOYMENT_NAME }} \
+              --namespace=${{ secrets.EKS_NAMESPACE }} \
+              -o jsonpath='{.status.readyReplicas}')
+
+            AVAILABLE=$(kubectl get deployment ${{ secrets.EKS_DEPLOYMENT_NAME }} \
+              --namespace=${{ secrets.EKS_NAMESPACE }} \
+              -o jsonpath='{.status.availableReplicas}')
+
+            READY=${READY:-0}
+            AVAILABLE=${AVAILABLE:-0}
+
+            echo "  Desired   : $DESIRED"
+            echo "  Ready     : $READY"
+            echo "  Available : $AVAILABLE"
+
+            if [ "$READY" = "$DESIRED" ] && [ "$AVAILABLE" = "$DESIRED" ]; then
+              echo ""
+              echo "Smoke test passed — EKS deployment is healthy."
+              exit 0
+            fi
+
+            if [ $i -lt $MAX ]; then
+              echo "  Not ready yet. Waiting ${DELAY}s before retry..."
+              sleep $DELAY
+            fi
+          done
+
+          echo ""
+          echo "::error::Smoke test FAILED after $MAX attempts."
+          echo "::error::Last state — Desired=$DESIRED, Ready=$READY, Available=$AVAILABLE"
+          exit 1
